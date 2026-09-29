@@ -231,6 +231,7 @@ const SCOUT_TARGET_PROGRAM_ARTIFACT: &str = "programs/marginfi_program.so";
 // group = self.marginfi_group
 
 // LendingAccountDeposit.signer_token_account = self.signer_token_account
+// LendingAccountDeposit.remaining_accounts = vec![]
 
 // LendingPoolConfigureBank.bank_config_opt = scout_valid_bank_config_opt()
 
@@ -263,9 +264,11 @@ const SCOUT_TARGET_PROGRAM_ARTIFACT: &str = "programs/marginfi_program.so";
 // LendingAccountWithdraw.destination_token_account = self.signer_token_account
 // LendingAccountWithdraw.bank_liquidity_vault_authority = Pubkey::find_program_address(&[LIQUIDITY_VAULT_AUTHORITY_SEED, bank.as_ref()], &self.program_id).0
 // LendingAccountWithdraw.amount = SCOUT_WITHDRAW_SETUP_DEPOSIT_AMOUNT
+// LendingAccountWithdraw.remaining_accounts = vec![]
 
 // LendingPoolWithdrawFees.dst_token_account = self.fee_withdraw_dst_token_account
 // LendingPoolWithdrawFees.amount = 0
+// LendingPoolWithdrawFees.remaining_accounts = vec![]
 
 
 
@@ -275,6 +278,7 @@ const SCOUT_TARGET_PROGRAM_ARTIFACT: &str = "programs/marginfi_program.so";
 
 // LendingPoolUpdateFeesDestinationAccount.destination_account = self.fee_withdraw_dst_token_account
 // LendingPoolWithdrawFeesPermissionless.fees_destination_account = self.fee_withdraw_dst_token_account
+// LendingPoolWithdrawFeesPermissionless.remaining_accounts = vec![]
 
 // LendingPoolWithdrawInsurance.dst_token_account = self.fee_withdraw_dst_token_account
 // LendingPoolWithdrawInsurance.amount = 0
@@ -402,6 +406,7 @@ const SCOUT_TARGET_PROGRAM_ARTIFACT: &str = "programs/marginfi_program.so";
 
 // LendingAccountRepay.signer_token_account = self.signer_token_account
 // LendingAccountRepay.repay_all = Some(false)
+// LendingAccountRepay.remaining_accounts = vec![]
 
 // EndDeleverage.marginfi_account = match self.scout_prepare_end_deleverage_marginfi_account() { Some(v) => v, None => return false }
 
@@ -422,6 +427,7 @@ const SCOUT_TARGET_PROGRAM_ARTIFACT: &str = "programs/marginfi_program.so";
 // EndLiquidation.marginfi_account = match self.scout_prepare_end_liquidation_marginfi_account_receivership() { Some(v) => v, None => return false }
 
 // LendingPoolCollectBankFees.fee_ata = self.scout_prepare_collect_bank_fees(),
+// LendingPoolCollectBankFees.remaining_accounts = vec![]
 
 
 // LendingPoolCloseBank.bank = match self.scout_mint_lending_pool_close_bank_guard_bank(true, 0, fixed::types::I80F48::ZERO, fixed::types::I80F48::ZERO) { Some(v) => v, None => return false }
@@ -4626,7 +4632,7 @@ impl MarginfiFixture {
                 liquidity_vault: liquidity_vault,
                 token_program: token_program,
             })
-            // TODO: reads ctx.remaining_accounts (deposit.rs:50 +1 more); unbound, so validation fails before the handler runs (no logic, no coverage). Bind `LendingAccountDeposit.remaining_accounts = vec![..]` in SCOUT:BINDINGS (Vec<Pubkey>; prefix `metas:` for Vec<AccountMeta>). Don't guess.
+            .remaining_accounts(vec![])
             .signers(&[&*self.payer])
             .send()
             .map(|o| o.is_success())
@@ -4691,7 +4697,7 @@ impl MarginfiFixture {
                 liquidity_vault: liquidity_vault,
                 token_program: token_program,
             })
-            // TODO: reads ctx.remaining_accounts (repay.rs:51 +1 more); unbound, so validation fails before the handler runs (no logic, no coverage). Bind `LendingAccountRepay.remaining_accounts = vec![..]` in SCOUT:BINDINGS (Vec<Pubkey>; prefix `metas:` for Vec<AccountMeta>). Don't guess.
+            .remaining_accounts(vec![])
             .signers(&[&*self.payer])
             .send()
             .map(|o| o.is_success())
@@ -4783,7 +4789,7 @@ impl MarginfiFixture {
                 liquidity_vault: liquidity_vault,
                 token_program: token_program,
             })
-            // TODO: reads ctx.remaining_accounts (withdraw.rs:75 +4 more); unbound, so validation fails before the handler runs (no logic, no coverage). Bind `LendingAccountWithdraw.remaining_accounts = vec![..]` in SCOUT:BINDINGS (Vec<Pubkey>; prefix `metas:` for Vec<AccountMeta>). Don't guess.
+            .remaining_accounts(vec![])
             .signers(&[&*self.payer])
             .send()
             .map(|o| o.is_success())
@@ -5060,8 +5066,7 @@ impl MarginfiFixture {
                 fee_ata: fee_ata,
                 token_program: token_program,
             })
-            // TODO: LendingPoolCollectBankFees reads ctx.remaining_accounts (collect_bank_fees.rs:51 +3 more); unbound -> fails
-            // account validation before the handler runs, covers no lines. Bind `LendingPoolCollectBankFees.remaining_accounts = vec![..]` in SCOUT:BINDINGS (Vec<Pubkey>, appended read-only; `metas:` prefix for Vec<AccountMeta>). Don't guess.
+            .remaining_accounts(vec![])
             .signers(&[&*self.payer])
             .send()
             .map(|o| o.is_success())
@@ -5097,8 +5102,7 @@ impl MarginfiFixture {
                 dst_token_account: dst_token_account,
                 token_program: token_program,
             })
-            // TODO: LendingPoolWithdrawFees reads ctx.remaining_accounts (collect_bank_fees.rs:267 +1 more); unbound -> fails
-            // account validation before the handler runs, covers no lines. Bind `LendingPoolWithdrawFees.remaining_accounts = vec![..]` in SCOUT:BINDINGS (Vec<Pubkey>, appended read-only; `metas:` prefix for Vec<AccountMeta>). Don't guess.
+            .remaining_accounts(vec![])
             .signers(&[&*self.payer])
             .send()
             .map(|o| o.is_success())
@@ -5128,8 +5132,7 @@ impl MarginfiFixture {
                 fees_destination_account: fees_destination_account,
                 token_program: token_program,
             })
-            // TODO: LendingPoolWithdrawFeesPermissionless reads ctx.remaining_accounts (collect_bank_fees.rs:471 +1 more); unbound -> fails
-            // account validation before the handler runs, covers no lines. Bind `LendingPoolWithdrawFeesPermissionless.remaining_accounts = vec![..]` in SCOUT:BINDINGS (Vec<Pubkey>, appended read-only; `metas:` prefix for Vec<AccountMeta>). Don't guess.
+            .remaining_accounts(vec![])
             .signers(&[&*self.payer])
             .send()
             .map(|o| o.is_success())
