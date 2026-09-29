@@ -1,0 +1,235 @@
+name: crucible-binding-evidence
+
+# Evidence run for the crucible remaining_accounts binding change: builds the
+# program from source, builds the harness, runs it on the runner, and captures
+# logs proving the deposit/repay/withdraw + fee handlers now execute. Two jobs:
+# `patched` (this branch) and `baseline` (unpatched 0.1.12-main tip) so the
+# before/after is visible in a single run page. Mirrors fuzzcorp.yml's build
+# steps; replaces the FuzzCorp bundle/upload with a local harness run.
+
+on:
+  workflow_dispatch: {}
+
+env:
+  RUST_TOOLCHAIN: 1.90.0
+  SOLANA_CLI_VERSION: 3.1.13
+  ANCHOR_CLI_VERSION: 1.0.2
+
+jobs:
+  patched:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      RUN_LABEL: patched
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/base-setup/
+        with:
+          include-anchor: "true"
+
+      - name: Build unstripped program for coverage symbols
+        run: |
+          set -euo pipefail
+          CARGO_PROFILE_RELEASE_DEBUG=2 CARGO_PROFILE_RELEASE_STRIP=none \
+            cargo build-sbf --manifest-path programs/marginfi/Cargo.toml \
+              2>&1 | tee /tmp/symbols.log
+          cargo build-sbf --manifest-path programs/solend-mocks/Cargo.toml 2>&1 | tail -5 || \
+            echo "::warning::solend_mocks build failed; staging will fall back to a fixture"
+
+      - name: Reject a build with SBF stack-frame violations
+        run: |
+          if grep -E 'exceeded max offset|overwrites values in the frame' /tmp/symbols.log \
+               | grep 'programs/marginfi/'; then
+            echo "::error::SBF stack-frame violation in marginfi's own code"
+            exit 1
+          fi
+
+      - name: Stage program artifacts into the harness
+        run: |
+          set -euo pipefail
+          test -f target/deploy/marginfi.so
+          mkdir -p fuzz/crucible/programs
+          cp target/deploy/marginfi.so fuzz/crucible/programs/marginfi_program.so
+          stage() {
+            want="$1"; shift
+            for src in "$@"; do
+              if [ -f "$src" ]; then
+                cp "$src" "fuzz/crucible/programs/$want"
+                echo "  staged $want <- $src"
+                return 0
+              fi
+            done
+            echo "::error::no source found for $want (tried: $*)"
+            return 1
+          }
+          stage drift_v2.so             tests/fixtures/drift_v2.so tests/fixtures/drift.so
+          stage kamino_farms.so         tests/fixtures/kamino_farms.so
+          stage kamino_lending_nocpi.so tests/fixtures/kamino_lending_nocpi.so
+          stage solend.so               tests/fixtures/solend.so
+          stage solend_mocks.so         tests/fixtures/solend_mocks.so \
+                                        target/deploy/solend_mocks.so
+
+      - name: Install Rust (stable) for the harness
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build harness (crucible main)
+        working-directory: fuzz/crucible
+        run: cargo build --release --locked --features invariant_test
+
+      - name: Run harness and capture evidence
+        working-directory: fuzz/crucible
+        run: |
+          set -o pipefail
+          echo "== help probe =="
+          (./target/release/invariant_test --help 2>&1 || true) | head -60
+          echo "== run (25 min budget) =="
+          ( RUST_LOG=info timeout 1500 ./target/release/invariant_test 2>&1 || true ) \
+            | tee "${RUN_LABEL}-fuzz.log" | tail -20
+          echo "== log size =="
+          wc -l "${RUN_LABEL}-fuzz.log"
+
+      - name: Summarize evidence
+        working-directory: fuzz/crucible
+        run: |
+          LOG="${RUN_LABEL}-fuzz.log"
+          {
+            echo "## ${RUN_LABEL} run"
+            echo ""
+            echo "| marker | count |"
+            echo "|---|---|"
+            for pat in \
+              "Instruction: LendingAccountDeposit" \
+              "Instruction: LendingAccountRepay" \
+              "Instruction: LendingAccountWithdraw" \
+              "Instruction: LendingPoolCollectBankFees" \
+              "Instruction: LendingPoolWithdrawFees" \
+              "P-0004" \
+              "P-0036" \
+              "SCOUT_CHECK_EVALUATED"; do
+              c=$(grep -cF "$pat" "$LOG" 2>/dev/null || true)
+              echo "| \`$pat\` | ${c:-0} |"
+            done
+            echo ""
+            errs=$(grep -ciE 'WrongNumberOfOracleAccounts|BankAccountNotFound|T22MintRequired' "$LOG" || true)
+            echo "oracle-validation errors (WrongNumberOfOracleAccounts/BankAccountNotFound/T22MintRequired): ${errs:-0}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload evidence log
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-log-patched
+          path: fuzz/crucible/patched-fuzz.log
+          retention-days: 30
+
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      RUN_LABEL: baseline
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # unpatched 0.1.12-main tip — the control
+          ref: 9582b8c3964120c4a4bcf521065e31c2df250ec4
+
+      - uses: ./.github/actions/base-setup/
+        with:
+          include-anchor: "true"
+
+      - name: Build unstripped program for coverage symbols
+        run: |
+          set -euo pipefail
+          CARGO_PROFILE_RELEASE_DEBUG=2 CARGO_PROFILE_RELEASE_STRIP=none \
+            cargo build-sbf --manifest-path programs/marginfi/Cargo.toml \
+              2>&1 | tee /tmp/symbols.log
+          cargo build-sbf --manifest-path programs/solend-mocks/Cargo.toml 2>&1 | tail -5 || \
+            echo "::warning::solend_mocks build failed; staging will fall back to a fixture"
+
+      - name: Reject a build with SBF stack-frame violations
+        run: |
+          if grep -E 'exceeded max offset|overwrites values in the frame' /tmp/symbols.log \
+               | grep 'programs/marginfi/'; then
+            echo "::error::SBF stack-frame violation in marginfi's own code"
+            exit 1
+          fi
+
+      - name: Stage program artifacts into the harness
+        run: |
+          set -euo pipefail
+          test -f target/deploy/marginfi.so
+          mkdir -p fuzz/crucible/programs
+          cp target/deploy/marginfi.so fuzz/crucible/programs/marginfi_program.so
+          stage() {
+            want="$1"; shift
+            for src in "$@"; do
+              if [ -f "$src" ]; then
+                cp "$src" "fuzz/crucible/programs/$want"
+                echo "  staged $want <- $src"
+                return 0
+              fi
+            done
+            echo "::error::no source found for $want (tried: $*)"
+            return 1
+          }
+          stage drift_v2.so             tests/fixtures/drift_v2.so tests/fixtures/drift.so
+          stage kamino_farms.so         tests/fixtures/kamino_farms.so
+          stage kamino_lending_nocpi.so tests/fixtures/kamino_lending_nocpi.so
+          stage solend.so               tests/fixtures/solend.so
+          stage solend_mocks.so         tests/fixtures/solend_mocks.so \
+                                        target/deploy/solend_mocks.so
+
+      - name: Install Rust (stable) for the harness
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build harness (crucible main)
+        working-directory: fuzz/crucible
+        run: cargo build --release --locked --features invariant_test
+
+      - name: Run harness and capture evidence
+        working-directory: fuzz/crucible
+        run: |
+          set -o pipefail
+          echo "== help probe =="
+          (./target/release/invariant_test --help 2>&1 || true) | head -60
+          echo "== run (25 min budget) =="
+          ( RUST_LOG=info timeout 1500 ./target/release/invariant_test 2>&1 || true ) \
+            | tee "${RUN_LABEL}-fuzz.log" | tail -20
+          echo "== log size =="
+          wc -l "${RUN_LABEL}-fuzz.log"
+
+      - name: Summarize evidence
+        working-directory: fuzz/crucible
+        run: |
+          LOG="${RUN_LABEL}-fuzz.log"
+          {
+            echo "## ${RUN_LABEL} run"
+            echo ""
+            echo "| marker | count |"
+            echo "|---|---|"
+            for pat in \
+              "Instruction: LendingAccountDeposit" \
+              "Instruction: LendingAccountRepay" \
+              "Instruction: LendingAccountWithdraw" \
+              "Instruction: LendingPoolCollectBankFees" \
+              "Instruction: LendingPoolWithdrawFees" \
+              "P-0004" \
+              "P-0036" \
+              "SCOUT_CHECK_EVALUATED"; do
+              c=$(grep -cF "$pat" "$LOG" 2>/dev/null || true)
+              echo "| \`$pat\` | ${c:-0} |"
+            done
+            echo ""
+            errs=$(grep -ciE 'WrongNumberOfOracleAccounts|BankAccountNotFound|T22MintRequired' "$LOG" || true)
+            echo "oracle-validation errors (WrongNumberOfOracleAccounts/BankAccountNotFound/T22MintRequired): ${errs:-0}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload evidence log
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-log-baseline
+          path: fuzz/crucible/baseline-fuzz.log
+          retention-days: 30
