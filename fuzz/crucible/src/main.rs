@@ -3447,17 +3447,11 @@ impl MarginfiFixture {
                 .program(fixture.program_id)
                 .call(instruction::MarginfiGroupConfigure {
                     new_admin: Some(fixture.payer.pubkey()),
-                    new_emode_admin: Some(fixture.payer.pubkey()),
                     new_curve_admin: Some(fixture.payer.pubkey()),
                     new_limit_admin: Some(fixture.payer.pubkey()),
+                    new_flow_admin: Some(fixture.payer.pubkey()),
                     new_emissions_admin: Some(fixture.payer.pubkey()),
                     new_metadata_admin: Some(fixture.payer.pubkey()),
-                    new_risk_admin: Some(fixture.payer.pubkey()),
-                    new_flow_admin: Some(fixture.payer.pubkey()),
-                    emode_max_init_leverage: None,
-                    emode_max_maint_leverage: None,
-                    same_asset_emode_init_leverage: None,
-                    same_asset_emode_maint_leverage: None,
                 })
                 .accounts(accounts::MarginfiGroupConfigure {
                     marginfi_group: fixture.marginfi_group,
@@ -3471,6 +3465,31 @@ impl MarginfiFixture {
              lending_pool_force_tokenless_repay_complete (and every other admin-role-gated \
              instruction relying on a real, non-zero risk_admin/delegate_*_admin/emode_admin/ \
              metadata_admin) failed"
+        );
+        assert!(
+            fixture.ctx
+                .program(fixture.program_id)
+                .call(instruction::MarginfiGroupConfigureGov {
+                    new_admin: None,
+                    new_emode_admin: Some(fixture.payer.pubkey()),
+                    new_risk_admin: Some(fixture.payer.pubkey()),
+                    emode_max_init_leverage: None,
+                    emode_max_maint_leverage: None,
+                    same_asset_emode_init_leverage: None,
+                    same_asset_emode_maint_leverage: None,
+                })
+                .accounts(accounts::MarginfiGroupConfigureGov {
+                    marginfi_group: fixture.marginfi_group,
+                    governance_admin: fixture.payer.pubkey(),
+                })
+                .signers(&[&*fixture.payer])
+                .send()
+                .map(|o| o.is_success())
+                .unwrap_or(false),
+            "setup: marginfi_group_configure_gov prerequisite for \
+             lending_pool_force_tokenless_repay_complete failed: risk_admin and emode_admin \
+             are governance roles since the configure/configure_gov split, so they cannot be \
+             set through marginfi_group_configure"
         );
         let tokenless_bank_keypair = Keypair::new();
         let tokenless_bank_pubkey = tokenless_bank_keypair.pubkey();
@@ -4142,19 +4161,15 @@ impl MarginfiFixture {
     pub fn action_marginfi_group_configure(&mut self) -> bool {
         // TODO: arg emode_max_init_leverage: Option<marginfi::types::WrappedI80F48>; arg emode_max_maint_leverage: Option<marginfi::types::WrappedI80F48>
         let new_admin: Pubkey = self.payer.pubkey();
-        let new_emode_admin: Pubkey = self.payer.pubkey();
         let new_curve_admin: Pubkey = self.payer.pubkey();
         let new_limit_admin: Pubkey = self.payer.pubkey();
         let new_emissions_admin: Pubkey = self.payer.pubkey();
         let new_metadata_admin: Pubkey = self.payer.pubkey();
-        let new_risk_admin: Pubkey = self.payer.pubkey();
-        let emode_max_init_leverage: Option<marginfi::types::WrappedI80F48> = Default::default(); // TODO: construct arg emode_max_init_leverage: Option<marginfi::types::WrappedI80F48>
-        let emode_max_maint_leverage: Option<marginfi::types::WrappedI80F48> = Default::default(); // TODO: construct arg emode_max_maint_leverage: Option<marginfi::types::WrappedI80F48>
         let marginfi_group = self.marginfi_group;
         let admin = self.payer.pubkey();
         let __scout_success = self.ctx
             .program(self.program_id)
-            .call(instruction::MarginfiGroupConfigure { new_admin: Some(new_admin), new_emode_admin: Some(new_emode_admin), new_curve_admin: Some(new_curve_admin), new_limit_admin: Some(new_limit_admin), new_emissions_admin: Some(new_emissions_admin), new_metadata_admin: Some(new_metadata_admin), new_risk_admin: Some(new_risk_admin), new_flow_admin: None, emode_max_init_leverage, emode_max_maint_leverage, same_asset_emode_init_leverage: None, same_asset_emode_maint_leverage: None })
+            .call(instruction::MarginfiGroupConfigure { new_admin: Some(new_admin), new_curve_admin: Some(new_curve_admin), new_limit_admin: Some(new_limit_admin), new_flow_admin: Some(self.payer.pubkey()), new_emissions_admin: Some(new_emissions_admin), new_metadata_admin: Some(new_metadata_admin) })
             .accounts(accounts::MarginfiGroupConfigure {
                 marginfi_group: marginfi_group,
                 admin: admin,
@@ -5949,17 +5964,11 @@ impl MarginfiFixture {
             .program(self.program_id)
             .call(instruction::MarginfiGroupConfigure {
                 new_admin: Some(self.payer.pubkey()),
-                new_emode_admin: Some(self.payer.pubkey()),
                 new_curve_admin: Some(self.payer.pubkey()),
                 new_limit_admin: Some(self.payer.pubkey()),
+                new_flow_admin: Some(self.payer.pubkey()),
                 new_emissions_admin: Some(self.payer.pubkey()),
                 new_metadata_admin: Some(self.payer.pubkey()),
-                new_risk_admin: Some(self.payer.pubkey()),
-                new_flow_admin: Some(self.payer.pubkey()),
-                emode_max_init_leverage: None,
-                emode_max_maint_leverage: None,
-                same_asset_emode_init_leverage: None,
-                same_asset_emode_maint_leverage: None,
             })
             .accounts(accounts::MarginfiGroupConfigure {
                 marginfi_group,

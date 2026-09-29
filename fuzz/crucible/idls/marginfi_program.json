@@ -10264,11 +10264,8 @@
     {
       "name": "marginfi_group_configure",
       "docs": [
-        "(admin only) Configure group admin keys and emode leverage caps. All admin keys must be",
-        "provided on every call. Emode leverage caps are set if provided, otherwise the existing",
-        "(non-zero) values are kept. Pass `Some(value)` to update, `None` to leave unchanged.",
-        "Same-asset emode leverage is disabled by configuring both init and maint leverage to `1`;",
-        "values below `1`, including `0`, are invalid.",
+        "(admin only) Configure the fast group admin keys. All admin keys must be provided",
+        "on every call. Pass `Some(value)` to update, `None` to leave unchanged.",
         "",
         "Note: `new_emissions_admin` is deprecated and currently has no on-chain effect."
       ],
@@ -10307,12 +10304,6 @@
           }
         },
         {
-          "name": "new_emode_admin",
-          "type": {
-            "option": "pubkey"
-          }
-        },
-        {
           "name": "new_curve_admin",
           "type": {
             "option": "pubkey"
@@ -10338,6 +10329,54 @@
         },
         {
           "name": "new_metadata_admin",
+          "type": {
+            "option": "pubkey"
+          }
+        }
+      ]
+    },
+    {
+      "name": "marginfi_group_configure_gov",
+      "docs": [
+        "(governance_admin only) Configure slow, timelocked margin group governance roles,",
+        "the fast admin, and e-mode leverage caps."
+      ],
+      "discriminator": [
+        3,
+        33,
+        122,
+        31,
+        239,
+        33,
+        35,
+        5
+      ],
+      "accounts": [
+        {
+          "name": "marginfi_group",
+          "writable": true
+        },
+        {
+          "name": "governance_admin",
+          "signer": true,
+          "relations": [
+            "marginfi_group"
+          ]
+        },
+        {
+          "name": "instruction_sysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "new_admin",
+          "type": {
+            "option": "pubkey"
+          }
+        },
+        {
+          "name": "new_emode_admin",
           "type": {
             "option": "pubkey"
           }
